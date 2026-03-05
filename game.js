@@ -1,97 +1,109 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
+// Load images
+const playerImgs = {
+    idle: loadImg("assets/player/idle.png"),
+    walk1: loadImg("assets/player/walk1.png"),
+    walk2: loadImg("assets/player/walk2.png")
+};
+const bgImgs = [
+    loadImg("assets/backgrounds/room1.png"),
+    loadImg("assets/backgrounds/room2.png")
+];
+const itemImgs = {
+    apple: loadImg("assets/items/apple.png"),
+    ball: loadImg("assets/items/ball.png")
+};
+
 // Game state
-let player = { x: 100, y: 100, width: 50, height: 50, color: "red", inventory: [] };
+let currentRoom = 0;
+let player = { x:100, y:300, frame:0, direction:1, inv:[] };
 let items = [
-    { id: 1, x: 300, y: 200, width: 40, height: 40, color: "green", name: "Apple" },
-    { id: 2, x: 500, y: 400, width: 40, height: 40, color: "blue", name: "Ball" }
+    {name:"apple", x:300, y:350},
+    {name:"ball", x:500, y:380}
 ];
 let keys = {};
-let rooms = [
-    { id: 1, name: "Room 1", bgColor: "#fceabb" },
-    { id: 2, name: "Room 2", bgColor: "#d0f4f7" }
-];
-let currentRoom = 0;
 
-// Event listeners
+// Controls
 window.addEventListener("keydown", e => keys[e.key] = true);
 window.addEventListener("keyup", e => keys[e.key] = false);
-
-document.getElementById("saveBtn").addEventListener("click", saveGame);
-document.getElementById("loadBtn").addEventListener("click", loadGame);
+document.getElementById("saveBtn").onclick = saveGame;
+document.getElementById("loadBtn").onclick = loadGame;
 
 // Game loop
 function update() {
     movePlayer();
-    checkItemPickup();
     draw();
     requestAnimationFrame(update);
 }
 
 function movePlayer() {
-    if(keys["ArrowUp"]) player.y -= 5;
-    if(keys["ArrowDown"]) player.y += 5;
-    if(keys["ArrowLeft"]) player.x -= 5;
-    if(keys["ArrowRight"]) player.x += 5;
+    let moving = false;
+    if(keys["ArrowRight"]) { player.x += 4; player.direction = 1; moving=true; }
+    if(keys["ArrowLeft"])  { player.x -= 4; player.direction = -1; moving=true; }
+    if(keys["ArrowUp"])    { player.y -= 4; moving=true; }
+    if(keys["ArrowDown"])  { player.y += 4; moving=true; }
 
-    // Room teleport (simple)
-    if(player.x > canvas.width) { currentRoom = (currentRoom+1) % rooms.length; player.x = 0; }
-    if(player.x < 0) { currentRoom = (currentRoom-1+rooms.length) % rooms.length; player.x = canvas.width-50; }
-}
+    // Animation
+    if(moving) {
+        player.frame = (player.frame+1) % 20;
+    } else {
+        player.frame = 0;
+    }
 
-function checkItemPickup() {
-    items.forEach((item, idx) => {
-        if(player.x < item.x + item.width &&
-           player.x + player.width > item.x &&
-           player.y < item.y + item.height &&
-           player.y + player.height > item.y) {
-            // Pick item
-            if(!player.inventory.includes(item.name)) {
-                player.inventory.push(item.name);
-                console.log("Picked up:", item.name);
-            }
+    // Item pickup
+    items = items.filter(it => {
+        if(Math.hypot(player.x - it.x, player.y - it.y) < 40) {
+            if(!player.inv.includes(it.name)) player.inv.push(it.name);
+            return false;
         }
+        return true;
     });
+
+    updateInventoryUI();
 }
 
 function draw() {
-    // Room background
-    ctx.fillStyle = rooms[currentRoom].bgColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // background
+    ctx.drawImage(bgImgs[currentRoom],0,0,canvas.width,canvas.height);
 
-    // Draw player
-    ctx.fillStyle = player.color;
-    ctx.fillRect(player.x, player.y, player.width, player.height);
+    // player sprite
+    let img = playerImgs.idle;
+    if(player.frame > 5 && player.frame < 15) img = playerImgs.walk1;
+    if(player.frame >= 15) img = playerImgs.walk2;
 
-    // Draw items
-    items.forEach(item => {
-        ctx.fillStyle = item.color;
-        ctx.fillRect(item.x, item.y, item.width, item.height);
-    });
+    ctx.save();
+    if(player.direction == -1) {
+        ctx.scale(-1,1);
+        ctx.drawImage(img, -player.x -50, player.y, 50, 70);
+    } else {
+        ctx.drawImage(img, player.x, player.y, 50, 70);
+    }
+    ctx.restore();
 
-    // Inventory display
-    ctx.fillStyle = "black";
-    ctx.font = "16px Arial";
-    ctx.fillText("Inventory: " + player.inventory.join(", "), 10, canvas.height - 10);
+    // items
+    items.forEach(it => ctx.drawImage(itemImgs[it.name], it.x, it.y, 40, 40));
+}
+
+function updateInventoryUI() {
+    document.getElementById("inventory").innerText =  
+      "Inventory: " + player.inv.join(", ");
 }
 
 function saveGame() {
-    const saveData = { player, currentRoom };
-    localStorage.setItem("tocaWorldSave", JSON.stringify(saveData));
+    localStorage.setItem("saveData", JSON.stringify({player, currentRoom}));
     alert("Game Saved!");
 }
-
 function loadGame() {
-    const data = JSON.parse(localStorage.getItem("tocaWorldSave"));
-    if(data) {
-        player = data.player;
-        currentRoom = data.currentRoom;
-        alert("Game Loaded!");
-    } else {
-        alert("No saved game found.");
-    }
+    let data = JSON.parse(localStorage.getItem("saveData"));
+    if(data) { player = data.player; currentRoom = data.currentRoom; alert("Loaded!"); }
 }
 
-// Start game
+function loadImg(src) {
+    let img = new Image();
+    img.src = src;
+    return img;
+}
+
 update();
